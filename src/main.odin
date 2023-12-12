@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "core:sort"
 import "core:slice"
 import rl "vendor:raylib"
@@ -12,7 +13,7 @@ NIL_HANDLE :: ElementHandle(max(uint))
 
 Element :: struct {
 	handle: ElementHandle,
-	parent: ElementHandle,
+	parent: ^Element,
 	position: [2]f32,
 	z: i32,
 }
@@ -20,9 +21,18 @@ Element :: struct {
 make_element :: proc() -> Element {
 	return Element{
 		handle = new_handle(),
-		parent = NIL_HANDLE,
+		parent = nil,
 		position = {0, 0},
 		z = 0,
+	}
+}
+
+calc_element_position :: proc(using element: ^Element) -> [2]f32 {
+	if parent != nil {
+		return position + calc_element_position(parent)
+	}
+	else {
+		return position
 	}
 }
 
@@ -94,7 +104,16 @@ new_handle :: proc() -> (handle: ElementHandle) {
 
 // -------------------------------------------- APPLICATION --------------------------------------------
 
+app_data: struct {
+	main_panel: ^Panel,
+	panel1: ^Panel,
+	panel2: ^Panel,
+	time: f32,
+}
+
 update :: proc(delta_time: f32) {
+	app_data.time += delta_time
+
 	clear(&global_data.sorted_panels)
 	for handle, &panel in global_data.panels {
 		append(&global_data.sorted_panels, &panel)
@@ -102,8 +121,11 @@ update :: proc(delta_time: f32) {
 
 	slice.sort_by(global_data.sorted_panels[:], proc(a, b: ^Panel) -> bool { return a.z < b.z })
 
-	for &panel in global_data.sorted_panels {
+	app_data.panel1.position.x = 100 + 100 * math.sin(app_data.time * math.PI)
+	app_data.panel1.position.y = 100 + 100 * math.cos(app_data.time * math.PI)
 
+	for &panel in global_data.sorted_panels {
+		
 	}
 }
 
@@ -114,9 +136,10 @@ draw :: proc() {
 		// rl.DrawText("Window text", 100, 100, 18, rl.BLACK)
 
 		for panel in global_data.sorted_panels {
+			position := calc_element_position(panel)
 			rl.DrawRectangle(
-				cast(i32)panel.position.x,
-				cast(i32)panel.position.y,
+				cast(i32)position.x,
+				cast(i32)position.y,
 				cast(i32)panel.dimensions.x,
 				cast(i32)panel.dimensions.y,
 				panel.color,
@@ -133,6 +156,8 @@ main :: proc() {
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Title")
 	defer rl.CloseWindow()
 
+	rl.SetTargetFPS(60)
+
 	initialize_global_data()
 	defer destroy_global_data()
 
@@ -141,18 +166,23 @@ main :: proc() {
 	main_panel.position = {0, 0}
 	main_panel.dimensions = {WINDOW_WIDTH, WINDOW_HEIGHT}
 	main_panel.z = 0
+	app_data.main_panel = main_panel
 
 	h_panel1, panel1 := make_panel()
+	panel1.parent = main_panel
 	panel1.color = rl.RED
 	panel1.position = {100, 100}
 	panel1.dimensions = {100, 100}
 	panel1.z = 1
+	app_data.panel1 = panel1
 
 	h_panel2, panel2 := make_panel()
+	panel2.parent = panel1
 	panel2.color = rl.GREEN
-	panel2.position = {300, 100}
+	panel2.position = {100, 0}
 	panel2.dimensions = {100, 100}
 	panel2.z = 2
+	app_data.panel2 = panel2
 
 	for !rl.WindowShouldClose() {
 		update(rl.GetFrameTime())
